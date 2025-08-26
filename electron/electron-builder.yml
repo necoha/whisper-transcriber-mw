@@ -1,0 +1,47 @@
+appId: com.whisper.transcriber
+copyright: "© 2025 Claude Code Assistant"
+directories:
+  output: dist
+
+files:
+  - from: .
+    filter:
+      - dist/**
+      - src/**
+      - package.json
+      
+extraResources:
+  - from: ../backend
+    to: backend
+    
+asarUnpack:
+  - backend/**
+
+mac:
+  category: public.app-category.productivity
+  target:
+    - target: default
+      arch:
+        - arm64
+        - x64
+  artifactName: "${productName}-${version}-${arch}-mac.${ext}"
+  darkModeSupport: true
+  hardenedRuntime: false
+  gatekeeperAssess: false
+
+dmg:
+  title: "Whisper Transcriber"
+  format: UDZO
+  
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+        - ia32
+
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64

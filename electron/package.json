@@ -1,0 +1,23 @@
+{
+  "name": "whisper-transcriber",
+  "version": "1.0.0",
+  "productName": "Whisper Transcriber",
+  "description": "高精度な音声文字起こしアプリケーション（MLX Whisper対応）",
+  "author": "Claude Code Assistant",
+  "private": true,
+  "main": "src/main.js",
+  "type": "module",
+  "homepage": ".",
+  "scripts": {
+    "dev": "electron .",
+    "build": "electron-builder",
+    "build:mac": "electron-builder --mac",
+    "build:dmg": "electron-builder --mac dmg",
+    "build:all": "electron-builder --mac --win --linux"
+  },
+  "devDependencies": {
+    "electron": "^30.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "dependencies": {}
+}

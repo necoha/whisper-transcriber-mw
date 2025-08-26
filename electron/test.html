@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Button Test</title>
+</head>
+<body>
+    <h1>Button Test</h1>
+    <button id="test-btn">Test Button</button>
+    <div id="result"></div>
+
+    <script type="module">
+        console.log('Script loaded');
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('DOM loaded');
+            
+            const btn = document.getElementById('test-btn');
+            const result = document.getElementById('result');
+            
+            if (btn && result) {
+                console.log('Elements found');
+                btn.onclick = () => {
+                    console.log('Button clicked');
+                    result.textContent = 'Button works!';
+                };
+            } else {
+                console.log('Elements not found');
+            }
+        });
+    </script>
+</body>
+</html>

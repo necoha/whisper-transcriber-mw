@@ -1,0 +1,6 @@
+torch
+transformers>=4.21.0
+onnxruntime-directml
+librosa
+numpy
+soundfile

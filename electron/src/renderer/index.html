@@ -1,0 +1,410 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src http://127.0.0.1:8765 ws://127.0.0.1:8765; img-src 'self' data:; style-src 'self' 'unsafe-inline';" />
+    <title>Whisper Transcriber - SRT対応</title>
+    <style>
+      :root {
+        --bg-primary: #f8f9fa;
+        --bg-card: white;
+        --text-primary: #343a40;
+        --text-secondary: #495057;
+        --text-muted: #6c757d;
+        --border-color: #dee2e6;
+        --shadow: rgba(0,0,0,0.1);
+      }
+      
+      [data-theme="dark"] {
+        --bg-primary: #1a1d23;
+        --bg-card: #2d3748;
+        --text-primary: #e2e8f0;
+        --text-secondary: #cbd5e0;
+        --text-muted: #a0aec0;
+        --border-color: #4a5568;
+        --shadow: rgba(0,0,0,0.3);
+      }
+      
+      body { 
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; 
+        margin: 24px; 
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        transition: background-color 0.3s ease, color 0.3s ease;
+      }
+      .container { max-width: 1200px; margin: 0 auto; }
+      .card { 
+        background: var(--bg-card); 
+        border-radius: 8px; 
+        padding: 20px; 
+        margin-bottom: 16px; 
+        box-shadow: 0 2px 4px var(--shadow);
+        transition: background-color 0.3s ease, box-shadow 0.3s ease;
+      }
+      .row { 
+        display: flex; 
+        gap: 12px; 
+        align-items: center; 
+        margin-bottom: 12px; 
+        flex-wrap: wrap;
+      }
+      .form-group { 
+        display: flex; 
+        flex-direction: column; 
+        gap: 4px; 
+      }
+      .form-group label { 
+        font-size: 14px; 
+        font-weight: 500; 
+        color: var(--text-secondary);
+      }
+      textarea { 
+        width: 100%; 
+        height: 320px; 
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        padding: 12px;
+        font-family: monospace;
+        resize: vertical;
+        background: var(--bg-card);
+        color: var(--text-primary);
+        transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+      }
+      button { 
+        padding: 8px 16px; 
+        border: none;
+        border-radius: 4px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background-color 0.2s;
+      }
+      .btn-primary { 
+        background: #007bff; 
+        color: white; 
+      }
+      .btn-primary:hover { background: #0056b3; }
+      .btn-success { 
+        background: #28a745; 
+        color: white; 
+      }
+      .btn-success:hover { background: #1e7e34; }
+      .btn-warning { 
+        background: #ffc107; 
+        color: #212529; 
+      }
+      .btn-warning:hover { background: #e0a800; }
+      .btn-danger { 
+        background: #dc3545; 
+        color: white; 
+      }
+      .btn-danger:hover { background: #c82333; }
+      .muted { 
+        opacity: 0.7; 
+        font-size: 12px; 
+        color: var(--text-muted);
+      }
+      input, select { 
+        padding: 6px 12px; 
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        background: var(--bg-card);
+        color: var(--text-primary);
+        transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+      }
+      .status { 
+        padding: 8px 12px; 
+        border-radius: 4px; 
+        font-size: 14px; 
+        margin-bottom: 12px;
+      }
+      .status.success { 
+        background: #d4edda; 
+        color: #155724; 
+        border: 1px solid #c3e6cb;
+      }
+      .status.error { 
+        background: #f8d7da; 
+        color: #721c24; 
+        border: 1px solid #f5c6cb;
+      }
+      .format-options {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 8px;
+      }
+      .format-btn {
+        padding: 6px 12px;
+        border: 1px solid var(--border-color);
+        background: var(--bg-card);
+        color: var(--text-primary);
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+        transition: all 0.2s;
+      }
+      .format-btn:hover { background: var(--bg-primary); }
+      .format-btn.active { 
+        background: #007bff; 
+        color: white; 
+        border-color: #007bff;
+      }
+      h1 { color: var(--text-primary); margin-bottom: 24px; }
+      h2 { 
+        color: var(--text-secondary); 
+        font-size: 18px; 
+        margin-bottom: 16px; 
+        border-bottom: 2px solid var(--border-color); 
+        padding-bottom: 8px;
+      }
+      .progress-container {
+        margin: 16px 0;
+      }
+      .progress-bar {
+        width: 100%;
+        height: 24px;
+        background-color: var(--border-color);
+        border-radius: 12px;
+        overflow: hidden;
+        position: relative;
+      }
+      .progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #28a745, #20c997);
+        width: 0%;
+        transition: width 0.3s ease;
+        border-radius: 12px;
+      }
+      
+      .progress-fill.success {
+        background: linear-gradient(90deg, #28a745, #20c997);
+      }
+      
+      .progress-fill.error {
+        background: linear-gradient(90deg, #dc3545, #c82333);
+      }
+      
+      /* Normal progress bar styles */
+      #normal-progress {
+        margin: 15px 0;
+        padding: 10px;
+        background: var(--bg-card);
+        border-radius: 8px;
+        border: 1px solid var(--border-color);
+      }
+      
+      #normal-progress .progress-bar {
+        margin-bottom: 8px;
+      }
+      
+      #normal-status {
+        font-size: 14px;
+        color: var(--text-secondary);
+        text-align: center;
+      }
+      .progress-text {
+        text-align: center;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-weight: bold;
+        color: var(--text-secondary);
+        font-size: 12px;
+        z-index: 1;
+      }
+      .progress-container {
+        position: relative;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🎙️ Whisper Transcriber - SRT字幕 + モデル切替 + DirectML + ストリーミング対応版</h1>
+
+      <div class="card">
+        <h2>設定</h2>
+        <div class="row">
+          <div class="form-group">
+            <label>言語</label>
+            <input id="lang" placeholder="ja / en / auto" value="auto" />
+          </div>
+          <div class="form-group">
+            <label>バックエンド</label>
+            <select id="backend">
+              <option value="auto" selected>OSに合わせて自動</option>
+              <option value="mlx">MLX（macOS/Apple Silicon）</option>
+              <option value="ctranslate2">CUDA（Windows/NVIDIA）</option>
+              <option value="directml">DirectML（AMD/Intel GPU）</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>モデル選択</label>
+            <select id="model" disabled>
+              <option value="">接続確認後に表示されます</option>
+            </select>
+          </div>
+          <button id="health" class="btn-primary">接続確認</button>
+          <button id="switch-model" class="btn-warning" disabled>モデル切替</button>
+          <button id="gpu-info" class="btn-primary">🎮 GPU情報</button>
+          <button id="theme-toggle" class="btn-primary">🌙 ダークモード</button>
+        </div>
+        <div id="status" class="status" style="display: none;"></div>
+        <div id="model-info" class="muted" style="margin-top: 8px;"></div>
+      </div>
+
+      <div class="card">
+        <h2>通常の文字起こし</h2>
+        <div class="row">
+          <input type="file" id="file" accept="audio/*,video/*" />
+          <button id="send" class="btn-success">ファイルを送信して文字起こし</button>
+        </div>
+        
+        <!-- 通常処理用の進捗表示 -->
+        <div id="normal-progress" style="display: none;">
+          <div class="progress-bar">
+            <div id="normal-progress-fill" class="progress-fill" style="width: 0%;"></div>
+            <span id="normal-progress-text" class="progress-text">0%</span>
+          </div>
+          <div id="normal-status" class="progress-status"></div>
+        </div>
+        
+        <div class="form-group">
+          <label>出力形式を選択:</label>
+          <div class="format-options">
+            <div class="format-btn active" data-format="text">📄 テキスト</div>
+            <div class="format-btn" data-format="srt">🎬 SRT字幕</div>
+            <div class="format-btn" data-format="vtt">🌐 WebVTT</div>
+            <div class="format-btn" data-format="txt">⏱️ タイムスタンプ付きテキスト</div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>🔊 音声品質向上オプション:</label>
+          <div class="row">
+            <div class="form-group">
+              <label>
+                <input type="checkbox" id="enable-vad" checked>
+                音声検出 (VAD)
+              </label>
+              <div class="muted">無音部分を自動カットして精度向上</div>
+            </div>
+            <div class="form-group">
+              <label>
+                <input type="checkbox" id="enable-noise-reduction" checked>
+                ノイズ除去
+              </label>
+              <div class="muted">背景ノイズを軽減</div>
+            </div>
+          </div>
+          
+          <div class="row">
+            <div class="form-group">
+              <label>VAD感度</label>
+              <select id="vad-aggressiveness">
+                <option value="0">低 (寛容)</option>
+                <option value="1" selected>中 (推奨)</option>
+                <option value="2">高</option>
+                <option value="3">最高 (厳格)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>ノイズ除去強度</label>
+              <select id="noise-strength">
+                <option value="0.3">弱</option>
+                <option value="0.6" selected>中 (推奨)</option>
+                <option value="0.8">強</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>📺 ストリーミング文字起こし（長時間音声対応）</h2>
+        <div class="row">
+          <input type="file" id="streaming-file" accept="audio/*,video/*" />
+          <button id="streaming-send" class="btn-warning">ストリーミング処理開始</button>
+          <button id="streaming-cancel" class="btn-danger" disabled>❌ キャンセル</button>
+        </div>
+        
+        <div class="row">
+          <div class="form-group">
+            <label>チャンク長（秒）</label>
+            <input type="number" id="chunk-duration" value="30" min="10" max="120" />
+          </div>
+          <div class="form-group">
+            <label>重複時間（秒）</label>
+            <input type="number" id="overlap-duration" value="3" min="1" max="10" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>🔊 音声品質向上オプション:</label>
+          <div class="row">
+            <div class="form-group">
+              <label>
+                <input type="checkbox" id="streaming-enable-vad" checked>
+                音声検出 (VAD)
+              </label>
+            </div>
+            <div class="form-group">
+              <label>
+                <input type="checkbox" id="streaming-enable-noise-reduction" checked>
+                ノイズ除去
+              </label>
+            </div>
+            <div class="form-group">
+              <label>VAD感度</label>
+              <select id="streaming-vad-aggressiveness">
+                <option value="0">低</option>
+                <option value="1" selected>中</option>
+                <option value="2">高</option>
+                <option value="3">最高</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>ノイズ除去強度</label>
+              <select id="streaming-noise-strength">
+                <option value="0.3">弱</option>
+                <option value="0.6" selected>中</option>
+                <option value="0.8">強</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        
+        <div id="streaming-progress" style="display: none;">
+          <div class="progress-container">
+            <div class="progress-bar">
+              <div id="progress-fill" class="progress-fill"></div>
+            </div>
+            <div id="progress-text" class="progress-text">準備中...</div>
+          </div>
+          <div id="streaming-status" class="muted"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>録音</h2>
+        <div class="row">
+          <button id="rec" class="btn-warning">● 録音開始</button>
+          <span id="recstate" class="muted"></span>
+        </div>
+        <p class="muted">録音はWebM形式で保存されます。FFmpegがインストールされていると安定します。</p>
+      </div>
+
+      <div class="card">
+        <h2>結果</h2>
+        <textarea id="out" placeholder="ここに文字起こし結果が表示されます（テキスト形式の場合）"></textarea>
+        <div class="row" style="margin-top: 12px;">
+          <button id="copy" class="btn-primary" style="display: none;">📋 結果をコピー</button>
+          <button id="save" class="btn-success" style="display: none;">💾 結果を保存</button>
+          <span id="download-info" class="muted"></span>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="renderer.js"></script>
+  </body>
+</html>
