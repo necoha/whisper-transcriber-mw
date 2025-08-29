@@ -256,8 +256,10 @@
       <div class="card">
         <h2>通常の文字起こし</h2>
         <div class="row">
-          <input type="file" id="file" accept="audio/*,video/*" />
-          <button id="send" class="btn-success">ファイルを送信して文字起こし</button>
+          <button id="select-file" class="btn-primary">📁 ファイルを選択</button>
+          <input type="file" id="file" accept="audio/*,video/*" style="display: none;" />
+          <span id="selected-file-info" class="muted"></span>
+          <button id="send" class="btn-success" style="display: none;">ファイルを送信して文字起こし</button>
         </div>
         
         <!-- 通常処理用の進捗表示 -->

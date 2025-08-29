@@ -9,6 +9,7 @@ let currentBackend = null;
 let availableModels = {};
 let currentStreamingJob = null;
 let streamingPollInterval = null;
+let selectedFileInfo = null;  // 選択されたファイルの情報を保存
 
 // WebSocket connection management
 let websocket = null;
@@ -118,6 +119,33 @@ async function autoHealthCheck() {
 
 // Initialize all event handlers
 function initializeEventHandlers() {
+  // File selection with native dialog
+  $('select-file').onclick = async () => {
+    try {
+      const fileInfo = await window.WHISPER_APP.selectAudioFile();
+      if (fileInfo) {
+        selectedFileInfo = fileInfo;
+        $('selected-file-info').textContent = `選択済み: ${fileInfo.name} (保存先: ${fileInfo.directory})`;
+        $('send').style.display = 'inline-block';
+        
+        // Create a File object from the file path for upload
+        const buffer = await window.WHISPER_APP.readFile(fileInfo.path);
+        const blob = new Blob([buffer], { type: 'audio/mpeg' });
+        const file = new File([blob], fileInfo.name, { type: 'audio/mpeg' });
+        
+        // Update the hidden file input
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        $('file').files = dt.files;
+        
+        showStatus(`ファイル選択完了: ${fileInfo.name}`, 'success');
+      }
+    } catch (error) {
+      showStatus(`ファイル選択エラー: ${error.message}`, 'error');
+      console.error('File selection error:', error);
+    }
+  };
+  
   // Health check (manual)
   $('health').onclick = async () => {
     try {
@@ -217,6 +245,11 @@ function initializeEventHandlers() {
     fd.append('enable_noise_reduction', $('enable-noise-reduction').checked);
     fd.append('vad_aggressiveness', $('vad-aggressiveness').value);
     fd.append('noise_reduce_strength', $('noise-strength').value);
+    
+    // Add save path if file was selected via native dialog
+    if (selectedFileInfo && selectedFileInfo.directory) {
+      fd.append('save_path', selectedFileInfo.directory);
+    }
 
     try {
       showStatus('処理中...', 'success');
@@ -235,7 +268,13 @@ function initializeEventHandlers() {
           lastResult = data.text;
           $('copy').style.display = 'inline-block';
           $('save').style.display = 'inline-block';
-          showStatus('文字起こし完了', 'success');
+          
+          // 自動保存パスを表示
+          if (data.saved_path) {
+            showStatus(`文字起こし完了 (自動保存: ${data.saved_path})`, 'success');
+          } else {
+            showStatus('文字起こし完了', 'success');
+          }
         } else {
           throw new Error(data.error || `HTTP ${res.status}`);
         }
@@ -257,7 +296,14 @@ function initializeEventHandlers() {
           lastResult = text;
           $('copy').style.display = 'inline-block';
           $('save').style.display = 'inline-block';
-          showStatus(`${currentFormat.toUpperCase()}ファイル生成完了`, 'success');
+          
+          // 自動保存パス情報を取得
+          const savedPath = res.headers.get('X-Saved-Path');
+          if (savedPath) {
+            showStatus(`${currentFormat.toUpperCase()}ファイル生成完了 (自動保存: ${savedPath})`, 'success');
+          } else {
+            showStatus(`${currentFormat.toUpperCase()}ファイル生成完了`, 'success');
+          }
         } else {
           const errorData = await res.json();
           throw new Error(errorData.error || `HTTP ${res.status}`);

@@ -1,5 +1,6 @@
 # backend/server.py
 import os, tempfile
+from pathlib import Path
 from fastapi import FastAPI, UploadFile, Form, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
@@ -10,6 +11,41 @@ from streaming import StreamingProcessor
 from audio_enhancement import enhance_audio_file
 
 PORT = int(os.getenv("PORT", "8765"))
+
+# ユーザーのホームディレクトリベースの保存先を設定
+import platform
+from pathlib import Path
+
+def get_default_save_dir():
+    """プラットフォームに応じたデフォルト保存先を取得"""
+    home = Path.home()
+    system = platform.system()
+    
+    if system == "Darwin":  # macOS
+        # Desktopが存在すればそちら、なければDownloads
+        desktop = home / "Desktop"
+        downloads = home / "Downloads"
+        if desktop.exists():
+            return desktop
+        elif downloads.exists():
+            return downloads
+        else:
+            return home
+    elif system == "Windows":
+        # Downloadsフォルダを優先
+        downloads = home / "Downloads"
+        if downloads.exists():
+            return downloads
+        else:
+            return home / "Desktop" if (home / "Desktop").exists() else home
+    else:  # Linux
+        downloads = home / "Downloads"
+        if downloads.exists():
+            return downloads
+        else:
+            return home
+
+OUTPUT_DIR = get_default_save_dir()
 
 app = FastAPI(title="Whisper Local ASR")
 app.add_middleware(
@@ -83,6 +119,81 @@ manager = ConnectionManager()
 # Set the WebSocket manager for streaming processor
 streaming_processor.websocket_manager = manager
 
+def auto_save_transcription(filename: str, content: str, format: str, custom_path: str = None) -> str:
+    """
+    入力ファイル名と同じ名前でテキストファイルを自動保存
+    
+    Args:
+        filename: 元のファイル名
+        content: 保存する内容
+        format: ファイル形式 (text, srt, vtt, txt)
+        custom_path: カスタム保存先パス (指定されない場合はデフォルト)
+    
+    Returns:
+        保存されたファイルのパス
+    """
+    if not filename:
+        filename = "transcription"
+    
+    # 拡張子を除去してベースファイル名を取得
+    base_name = Path(filename).stem
+    
+    # フォーマットに応じた拡張子を決定
+    if format == "text":
+        ext = ".txt"
+    elif format == "srt":
+        ext = ".srt"
+    elif format == "vtt":
+        ext = ".vtt"
+    elif format == "txt":
+        ext = ".txt"
+    else:
+        ext = ".txt"
+    
+    # 保存先ディレクトリを決定
+    if custom_path:
+        save_dir = Path(custom_path)
+        if not save_dir.exists():
+            try:
+                save_dir.mkdir(parents=True, exist_ok=True)
+            except:
+                print(f"⚠️ カスタムパス作成失敗、デフォルトパスを使用: {OUTPUT_DIR}")
+                save_dir = OUTPUT_DIR
+    else:
+        save_dir = OUTPUT_DIR
+    
+    # 保存ファイルパスを生成
+    save_path = save_dir / f"{base_name}{ext}"
+    
+    # 同名ファイルが存在する場合は番号を付加
+    counter = 1
+    original_save_path = save_path
+    while save_path.exists():
+        save_path = save_dir / f"{base_name}_{counter}{ext}"
+        counter += 1
+    
+    # ファイルに保存
+    try:
+        save_path.write_text(content, encoding='utf-8')
+        print(f"✅ 自動保存完了: {save_path}")
+        return str(save_path)
+    except Exception as e:
+        print(f"❌ 自動保存エラー: {e}")
+        # フォールバック: デフォルトディレクトリに保存を試行
+        if custom_path and save_dir != OUTPUT_DIR:
+            try:
+                fallback_path = OUTPUT_DIR / f"{base_name}{ext}"
+                counter = 1
+                while fallback_path.exists():
+                    fallback_path = OUTPUT_DIR / f"{base_name}_{counter}{ext}"
+                    counter += 1
+                fallback_path.write_text(content, encoding='utf-8')
+                print(f"✅ フォールバック保存完了: {fallback_path}")
+                return str(fallback_path)
+            except Exception as fallback_error:
+                print(f"❌ フォールバック保存エラー: {fallback_error}")
+        return ""
+
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
     """WebSocket endpoint for real-time communication"""
@@ -127,7 +238,8 @@ async def transcribe(
     enable_vad: bool = Form(default=True),
     enable_noise_reduction: bool = Form(default=True),
     vad_aggressiveness: int = Form(default=1),
-    noise_reduce_strength: float = Form(default=0.6)
+    noise_reduce_strength: float = Form(default=0.6),
+    save_path: str | None = Form(default=None)  # カスタム保存先パス
 ):
     """
     Transcribe audio file with optional audio enhancement
@@ -140,6 +252,7 @@ async def transcribe(
     - enable_noise_reduction: Enable noise reduction
     - vad_aggressiveness: VAD aggressiveness level (0-3)
     - noise_reduce_strength: Noise reduction strength (0.0-1.0)
+    - save_path: Custom save directory path (optional)
     """
     # 一時保存してから処理
     suffix = os.path.splitext(file.filename or "")[1] or ".webm"
@@ -227,7 +340,13 @@ async def transcribe(
             })
         
         if format == "text":
-            return JSONResponse({"text": result["text"], "format": "text"})
+            # 自動保存
+            saved_path = auto_save_transcription(file.filename, result["text"], format, save_path)
+            return JSONResponse({
+                "text": result["text"], 
+                "format": "text",
+                "saved_path": saved_path
+            })
         
         elif format == "srt":
             if "segments" not in result:
@@ -236,11 +355,14 @@ async def transcribe(
                     status_code=400
                 )
             srt_content = segments_to_srt(result["segments"])
+            # 自動保存
+            saved_path = auto_save_transcription(file.filename, srt_content, format, save_path)
             return Response(
                 content=srt_content,
                 media_type="text/plain",
                 headers={
-                    "Content-Disposition": f"attachment; filename={file.filename or 'transcription'}.srt"
+                    "Content-Disposition": f"attachment; filename={file.filename or 'transcription'}.srt",
+                    "X-Saved-Path": saved_path
                 }
             )
         
@@ -251,11 +373,14 @@ async def transcribe(
                     status_code=400
                 )
             vtt_content = segments_to_vtt(result["segments"])
+            # 自動保存
+            saved_path = auto_save_transcription(file.filename, vtt_content, format, save_path)
             return Response(
                 content=vtt_content,
                 media_type="text/vtt",
                 headers={
-                    "Content-Disposition": f"attachment; filename={file.filename or 'transcription'}.vtt"
+                    "Content-Disposition": f"attachment; filename={file.filename or 'transcription'}.vtt",
+                    "X-Saved-Path": saved_path
                 }
             )
         
@@ -266,11 +391,14 @@ async def transcribe(
                     status_code=400
                 )
             txt_content = segments_to_txt(result["segments"])
+            # 自動保存
+            saved_path = auto_save_transcription(file.filename, txt_content, format, save_path)
             return Response(
                 content=txt_content,
                 media_type="text/plain",
                 headers={
-                    "Content-Disposition": f"attachment; filename={file.filename or 'transcription'}.txt"
+                    "Content-Disposition": f"attachment; filename={file.filename or 'transcription'}.txt",
+                    "X-Saved-Path": saved_path
                 }
             )
         
@@ -303,6 +431,19 @@ async def get_supported_formats():
             "srt": "SubRip subtitle format (.srt)",
             "vtt": "WebVTT subtitle format (.vtt)",
             "txt": "Text with timestamps (.txt)"
+        }
+    }
+
+@app.get("/save-config")
+async def get_save_config():
+    """現在の保存設定を取得"""
+    return {
+        "default_save_dir": str(OUTPUT_DIR),
+        "platform": platform.system(),
+        "available_dirs": {
+            "home": str(Path.home()),
+            "desktop": str(Path.home() / "Desktop") if (Path.home() / "Desktop").exists() else None,
+            "downloads": str(Path.home() / "Downloads") if (Path.home() / "Downloads").exists() else None,
         }
     }
 
